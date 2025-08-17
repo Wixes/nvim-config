@@ -6,8 +6,8 @@ This is basically my own configuration for kickstart nvim with adapted changes f
 ## Changes:
 
 ### Keybindings:
-- **<leader>ff** - format file with formatter. Implemented by `conform` plugin
-- **<leader>fs** - save all buffers. Implemented by vim command `:wa`
+- **leader-ff** - format file with formatter. Implemented by `conform` plugin
+- **leader-fs** - save all buffers. Implemented by vim command `:wa`
 
 ### Plugins:
 - **neo-tree** - plugin to browse the file system. [doc/keymaps here](https://github.com/nvim-neo-tree/neo-tree.nvim/blob/main/doc/neo-tree.txt)
