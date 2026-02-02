@@ -354,6 +354,8 @@ require('lazy').setup({
         { '<leader>t', group = '[T]oggle' },
         { '<leader>h', group = 'Git [H]unk', mode = { 'n', 'v' } },
         { '<leader>f', group = '[F]ile', mode = { 'n' } },
+        -- GIT
+        { '<leader>g', group = '[G]it', mode = { 'n' } },
       },
     },
   },
@@ -386,7 +388,10 @@ require('lazy').setup({
       { 'nvim-telescope/telescope-ui-select.nvim' },
 
       -- Useful for getting pretty icons, but requires a Nerd Font.
-      { 'nvim-tree/nvim-web-devicons', enabled = vim.g.have_nerd_font },
+      {
+        'nvim-tree/nvim-web-devicons',
+        enabled = vim.g.have_nerd_font,
+      },
     },
     config = function()
       -- Telescope is a fuzzy finder that comes with a lot of different things that
@@ -420,6 +425,9 @@ require('lazy').setup({
         --   },
         -- },
         -- pickers = {}
+        defaults = {
+          winblend = 20,
+        },
         extensions = {
           ['ui-select'] = {
             require('telescope.themes').get_dropdown(),
@@ -443,6 +451,8 @@ require('lazy').setup({
       vim.keymap.set('n', '<leader>sr', builtin.resume, { desc = '[S]earch [R]esume' })
       vim.keymap.set('n', '<leader>s.', builtin.oldfiles, { desc = '[S]earch Recent Files ("." for repeat)' })
       vim.keymap.set('n', '<leader><leader>', builtin.buffers, { desc = '[Space] Find existing buffers' })
+      vim.keymap.set('n', '<leader>gb', builtin.git_branches, { desc = '[G]it [B]ranches' })
+      vim.keymap.set('n', '<leader>gf', builtin.git_files, { desc = '[G]it [F]iles' })
 
       -- Slightly advanced example of overriding default behavior and theme
       vim.keymap.set('n', '<leader>/', function()
@@ -637,7 +647,14 @@ require('lazy').setup({
       -- See :help vim.diagnostic.Opts
       vim.diagnostic.config {
         severity_sort = true,
-        float = { border = 'rounded', source = 'if_many' },
+        -- Settings for floating diagnostic window
+        float = {
+          border = 'rounded', -- rounded borders for the window
+          source = 'always', -- Show where error coming from (eslint_d, tsls)
+          max_width = 80, -- Width of the window
+          header = '', -- Remove unnecessary headers
+          prefix = '● ', -- Prefix for every error
+        },
         underline = { severity = vim.diagnostic.severity.ERROR },
         signs = vim.g.have_nerd_font and {
           text = {
@@ -647,7 +664,9 @@ require('lazy').setup({
             [vim.diagnostic.severity.HINT] = '󰌶 ',
           },
         } or {},
-        virtual_text = {
+        -- Disable virtual_text because now we have a floating border
+        virtual_text = false,
+        --[[ virtual_text = {
           source = 'if_many',
           spacing = 2,
           format = function(diagnostic)
@@ -659,7 +678,7 @@ require('lazy').setup({
             }
             return diagnostic_message[diagnostic.severity]
           end,
-        },
+        }, ]]
       }
 
       -- LSP servers and clients are able to communicate to each other what features they support.
@@ -688,7 +707,33 @@ require('lazy').setup({
         --    https://github.com/pmizio/typescript-tools.nvim
         --
         -- But for many setups, the LSP (`ts_ls`) will work just fine
-        ts_ls = {},
+        vtsls = {
+          settings = {
+            javascript = {
+              updateImportsOnFileMove = { enabled = 'always' }, -- 'always', 'prompt', 'never'
+              preferences = {
+                includeCompletionsWithSnippetText = true,
+                jsxAttributeCompletionStyle = 'auto', -- Automatically close tags
+              },
+            },
+            typescript = {
+              updateImportsOnFileMove = { enabled = 'always' }, -- 'always', 'prompt', 'never'
+              preferences = {
+                includeCompletionsWithSnippetText = true,
+                jsxAttributeCompletionStyle = 'auto',
+              },
+            },
+          },
+          vtsls = {
+            -- Автоматически обновлять импорты при переименовании внутри Neovim
+            autoUseWorkspaceTsdk = true,
+            experimental = {
+              completion = {
+                enableServerSideFuzzyMatch = true,
+              },
+            },
+          },
+        },
         --
 
         lua_ls = {
@@ -802,11 +847,9 @@ require('lazy').setup({
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
         preset = 'default',
-
-        -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
-        --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
       },
-
+      -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
+      --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
       appearance = {
         -- 'mono' (default) for 'Nerd Font Mono' or 'normal' for 'Nerd Font'
         -- Adjusts spacing to ensure icons are aligned
@@ -814,9 +857,29 @@ require('lazy').setup({
       },
 
       completion = {
+        accept = {
+          auto_brackets = {
+            enabled = false,
+          },
+        },
         -- By default, you may press `<c-space>` to show the documentation.
         -- Optionally, set `auto_show = true` to show the documentation after a delay.
         documentation = { auto_show = false, auto_show_delay_ms = 500 },
+        menu = {
+          draw = {
+            columns = { { 'label', 'label_description', gap = 1 } },
+            components = {
+              label_description = {
+                width = { max = 30 },
+                text = function(ctx)
+                  -- Sometimes LSP has path in detail, not in the description
+                  return ctx.label_description or ctx.item.detail or ''
+                end,
+                highlight = 'Comment',
+              },
+            },
+          },
+        },
       },
 
       sources = {
@@ -906,11 +969,27 @@ require('lazy').setup({
   },
   { -- Highlight, edit, and navigate code
     'nvim-treesitter/nvim-treesitter',
+    lazy = false,
     build = ':TSUpdate',
-    main = 'nvim-treesitter.configs', -- Sets main module to use for opts
     -- [[ Configure Treesitter ]] See `:help nvim-treesitter`
     opts = {
-      ensure_installed = { 'bash', 'c', 'diff', 'html', 'lua', 'luadoc', 'markdown', 'markdown_inline', 'query', 'vim', 'vimdoc' },
+      ensure_installed = {
+        'typescript',
+        'tsx',
+        'javascript',
+        'jsx',
+        'bash',
+        'c',
+        'diff',
+        'html',
+        'lua',
+        'luadoc',
+        'markdown',
+        'markdown_inline',
+        'query',
+        'vim',
+        'vimdoc',
+      },
       -- Autoinstall languages that are not installed
       auto_install = true,
       highlight = {
@@ -959,6 +1038,8 @@ require('lazy').setup({
   { import = 'custom.plugins.neogit' },
   { import = 'custom.plugins.diffview' },
   { import = 'custom.plugins.conform' },
+  { import = 'custom.plugins.nvim-ts-autotag' },
+  { import = 'custom.plugins.nvim-lsp-file-operations' },
 }, {
   ui = {
     -- If you are using a Nerd Font: set icons to an empty table which will use the
@@ -979,6 +1060,36 @@ require('lazy').setup({
       lazy = '💤 ',
     },
   },
+})
+
+-- Setting to disable wrapping lines when they're too long for window
+vim.opt.wrap = false
+-- Remains 8 symbols at the end of the screen on horizontal scrolling
+vim.opt.sidescrolloff = 8
+
+-- Autocommand: show diagnostic window when cursor is on the error
+vim.api.nvim_create_autocmd('CursorHold', {
+  callback = function()
+    --[[   vim.diagnostic.open_float(nil, {
+      focusable = false, -- Чтобы курсор не прыгал в само окно
+      close_events = { 'CursorMoved', 'CursorMovedI', 'BufLeave', 'InsertEnter' },
+    })]]
+    -- Получаем позицию курсора
+    local _, lnum, col, _ = unpack(vim.fn.getpos '.')
+
+    -- Ищем, есть ли диагностика под курсором (на текущей строке и колонке)
+    local opts = {
+      scope = 'cursor', -- Ключевой параметр: показывать только то, что под курсором
+      focusable = false,
+      close_events = { 'CursorMoved', 'CursorMovedI', 'BufLeave', 'InsertEnter' },
+    }
+
+    -- Проверяем, есть ли вообще ошибки в этой позиции перед открытием
+    local diagnostics = vim.diagnostic.get(0, { lnum = lnum - 1 })
+    if #diagnostics > 0 then
+      vim.diagnostic.open_float(nil, opts)
+    end
+  end,
 })
 
 -- The line beneath this is called `modeline`. See `:help modeline`
