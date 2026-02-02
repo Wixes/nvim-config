@@ -6,7 +6,19 @@ return { -- Autoformat
     {
       '<leader>ff',
       function()
-        require('conform').format { async = false, lsp_format = 'fallback' }
+        require('conform').format({
+          async = false,
+          lsp_format = 'fallback',
+          timeout_ms = 10000,
+        }, function(err)
+          if not err then
+            -- Make sure that editor rerender diagnostic
+            -- to make sure there is no stale errors after format
+            vim.schedule(function()
+              vim.diagnostic.reset(nil, 0)
+            end)
+          end
+        end)
       end,
       mode = '',
       desc = '[F]ormat buffer',
@@ -25,7 +37,7 @@ return { -- Autoformat
         return {
           -- 10s is time for formatting. It needs because default is 500ms and in big projects
           -- it always timeout
-          timeout = 10000,
+          timeout_ms = 10000,
           lsp_format = 'fallback',
         }
       end
