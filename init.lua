@@ -154,6 +154,7 @@ vim.api.nvim_create_autocmd('ColorScheme', {
 
 -- Keep recent key presses visible in the statusline for a short time.
 vim.o.showcmd = false
+local recent_keys_width = 10
 local recent_keys = {}
 local key_sequence = 0
 vim.on_key(function(key)
@@ -162,9 +163,9 @@ vim.on_key(function(key)
   end
 
   local now = vim.uv.now()
-  local readable_key = vim.fn.keytrans(key):gsub('%%', '%%%%')
+  local readable_key = vim.fn.keytrans(key)
   recent_keys[#recent_keys + 1] = { value = readable_key, time = now }
-  while #recent_keys > 0 and (now - recent_keys[1].time) > 2000 do
+  while #recent_keys > 0 and (#recent_keys > recent_keys_width or (now - recent_keys[1].time) > 2000) do
     table.remove(recent_keys, 1)
   end
 
@@ -1039,12 +1040,19 @@ require('lazy').setup({
         while #recent_keys > 0 and (now - recent_keys[1].time) > 2000 do
           table.remove(recent_keys, 1)
         end
-        local keys = {}
-        for _, key in ipairs(recent_keys) do
-          keys[#keys + 1] = key.value
+        local recent = ''
+        local width = 0
+        for index = #recent_keys, 1, -1 do
+          local candidate = recent_keys[index].value .. recent
+          local candidate_width = vim.fn.strdisplaywidth(candidate)
+          if candidate_width > recent_keys_width then
+            break
+          end
+          recent = candidate
+          width = candidate_width
         end
-        local recent = #keys > 0 and (table.concat(keys) .. '  ') or ''
-        return recent .. '%2l:%-2v'
+        -- Pad to a fixed display width before escaping statusline percent signs.
+        return string.rep(' ', recent_keys_width - width) .. recent:gsub('%%', '%%%%') .. '  %2l:%-2v'
       end
 
       -- ... and there is more!
