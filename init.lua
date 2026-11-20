@@ -100,6 +100,16 @@ vim.g.have_nerd_font = true
 
 -- Make line numbers default
 vim.o.number = true
+
+-- Use two spaces for indentation by default.
+vim.o.tabstop = 2
+vim.o.shiftwidth = 2
+vim.o.softtabstop = 2
+vim.o.expandtab = true
+
+-- Keep swap files in Neovim's state directory without encoding full file paths.
+vim.opt.directory = vim.fn.stdpath('state') .. '/swap'
+
 -- You can also add relative line numbers, to help with jumping.
 --  Experiment for yourself to see if you like it!
 -- vim.o.relativenumber = true
@@ -130,6 +140,46 @@ vim.o.smartcase = true
 
 -- Keep signcolumn on by default
 vim.o.signcolumn = 'yes'
+-- Apply translucency to floating windows, including LSP hover and diagnostics.
+vim.o.winblend = 30
+vim.o.winborder = 'rounded'
+local function set_float_border_highlight()
+  vim.api.nvim_set_hl(0, 'FloatBorder', { fg = '#89b4fa', bold = true })
+end
+set_float_border_highlight()
+vim.api.nvim_create_autocmd('ColorScheme', {
+  callback = set_float_border_highlight,
+  desc = 'Keep floating window borders visible across colorschemes',
+})
+
+-- Keep recent key presses visible in the statusline for a short time.
+vim.o.showcmd = false
+local recent_keys = {}
+local key_sequence = 0
+vim.on_key(function(key)
+  if key == '' then
+    return
+  end
+
+  local now = vim.uv.now()
+  local readable_key = vim.fn.keytrans(key):gsub('%%', '%%%%')
+  recent_keys[#recent_keys + 1] = { value = readable_key, time = now }
+  while #recent_keys > 0 and (now - recent_keys[1].time) > 2000 do
+    table.remove(recent_keys, 1)
+  end
+
+  key_sequence = key_sequence + 1
+  local current_sequence = key_sequence
+  vim.schedule(function()
+    vim.cmd 'redrawstatus'
+  end)
+  vim.defer_fn(function()
+    if current_sequence == key_sequence then
+      recent_keys = {}
+      vim.cmd 'redrawstatus'
+    end
+  end, 2000)
+end)
 
 -- Decrease update time
 vim.o.updatetime = 250
@@ -213,6 +263,28 @@ vim.keymap.set('n', '<C-k>', '<C-w><C-k>', { desc = 'Move focus to the upper win
 
 -- [[ Basic Autocommands ]]
 --  See `:help lua-guide-autocommands`
+
+-- Use two-column tabs in Go files, while keeping tabs as the indentation character.
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = 'go',
+  callback = function()
+    vim.opt_local.tabstop = 2
+    vim.opt_local.shiftwidth = 2
+    vim.opt_local.softtabstop = 2
+    vim.opt_local.expandtab = false
+  end,
+})
+
+-- Use two-column, space-based indentation in TypeScript files.
+vim.api.nvim_create_autocmd('FileType', {
+  pattern = { 'typescript', 'typescriptreact' },
+  callback = function()
+    vim.opt_local.tabstop = 2
+    vim.opt_local.shiftwidth = 2
+    vim.opt_local.softtabstop = 2
+    vim.opt_local.expandtab = true
+  end,
+})
 
 -- Highlight when yanking (copying) text
 --  Try it with `yap` in normal mode
@@ -552,6 +624,10 @@ require('lazy').setup({
             vim.keymap.set(mode, keys, func, { buffer = event.buf, desc = 'LSP: ' .. desc })
           end
 
+          map('K', function()
+            vim.lsp.buf.hover { border = 'rounded', winblend = 30 }
+          end, 'Hover Documentation')
+
           -- Rename the variable under your cursor.
           --  Most Language Servers support renaming across files, etc.
           map('grn', vim.lsp.buf.rename, '[R]e[n]ame')
@@ -650,12 +726,13 @@ require('lazy').setup({
         -- Settings for floating diagnostic window
         float = {
           border = 'rounded', -- rounded borders for the window
+          winblend = 30,
           source = 'always', -- Show where error coming from (eslint_d, tsls)
           max_width = 80, -- Width of the window
           header = '', -- Remove unnecessary headers
           prefix = '● ', -- Prefix for every error
         },
-        underline = { severity = vim.diagnostic.severity.ERROR },
+        underline = true,
         signs = vim.g.have_nerd_font and {
           text = {
             [vim.diagnostic.severity.ERROR] = '󰅚 ',
@@ -681,6 +758,12 @@ require('lazy').setup({
         }, ]]
       }
 
+      -- Make the exact source range of errors stand out, not only its sign.
+      vim.api.nvim_set_hl(0, 'DiagnosticUnderlineError', { underline = true, undercurl = true, sp = '#ff5555' })
+      vim.api.nvim_set_hl(0, 'DiagnosticUnderlineWarn', { underline = true, undercurl = true, sp = '#f9e2af' })
+      vim.api.nvim_set_hl(0, 'DiagnosticUnderlineInfo', { underline = true, undercurl = true, sp = '#89b4fa' })
+      vim.api.nvim_set_hl(0, 'DiagnosticUnderlineHint', { underline = true, undercurl = true, sp = '#94e2d5' })
+
       -- LSP servers and clients are able to communicate to each other what features they support.
       --  By default, Neovim doesn't support everything that is in the LSP specification.
       --  When you add blink.cmp, luasnip, etc. Neovim now has *more* capabilities.
@@ -698,7 +781,7 @@ require('lazy').setup({
       --        For example, to see the options for `lua_ls`, you could go to: https://luals.github.io/wiki/settings/
       local servers = {
         -- clangd = {},
-        -- gopls = {},
+        gopls = {},
         -- pyright = {},
         -- rust_analyzer = {},
         -- ... etc. See `:help lspconfig-all` for a list of all the pre-configured LSPs
@@ -768,6 +851,8 @@ require('lazy').setup({
       local ensure_installed = vim.tbl_keys(servers or {})
       vim.list_extend(ensure_installed, {
         'stylua', -- Used to format Lua code
+        'goimports', -- Used to format Go code and organize imports
+        'golangci-lint', -- Used to lint Go code
       })
       require('mason-tool-installer').setup { ensure_installed = ensure_installed }
 
@@ -847,6 +932,7 @@ require('lazy').setup({
         --
         -- See :h blink-cmp-config-keymap for defining your own keymap
         preset = 'default',
+          ['<Tab>'] = { 'fallback' },
       },
       -- For more advanced Luasnip keymaps (e.g. selecting choice nodes, expansion) see:
       --    https://github.com/L3MON4D3/LuaSnip?tab=readme-ov-file#keymaps
@@ -905,25 +991,14 @@ require('lazy').setup({
     },
   },
 
-  { -- You can easily change to a different colorscheme.
-    -- Change the name of the colorscheme plugin below, and then
-    -- change the command in the config to whatever the name of that colorscheme is.
-    --
-    -- If you want to see what colorschemes are already installed, you can use `:Telescope colorscheme`.
-    'folke/tokyonight.nvim',
-    priority = 1000, -- Make sure to load this before all the other start plugins.
+  {
+    'projekt0n/github-nvim-theme',
+    name = 'github-theme',
+    lazy = false,
+    priority = 1000,
     config = function()
-      ---@diagnostic disable-next-line: missing-fields
-      require('tokyonight').setup {
-        styles = {
-          comments = { italic = false }, -- Disable italics in comments
-        },
-      }
-
-      -- Load the colorscheme here.
-      -- Like many other themes, this one has different styles, and you could load
-      -- any other, such as 'tokyonight-storm', 'tokyonight-moon', or 'tokyonight-day'.
-      vim.cmd.colorscheme 'tokyonight-night'
+      require('github-theme').setup {}
+      vim.cmd.colorscheme 'github_dark'
     end,
   },
 
@@ -960,7 +1035,16 @@ require('lazy').setup({
       -- cursor location to LINE:COLUMN
       ---@diagnostic disable-next-line: duplicate-set-field
       statusline.section_location = function()
-        return '%2l:%-2v'
+        local now = vim.uv.now()
+        while #recent_keys > 0 and (now - recent_keys[1].time) > 2000 do
+          table.remove(recent_keys, 1)
+        end
+        local keys = {}
+        for _, key in ipairs(recent_keys) do
+          keys[#keys + 1] = key.value
+        end
+        local recent = #keys > 0 and (table.concat(keys) .. '  ') or ''
+        return recent .. '%2l:%-2v'
       end
 
       -- ... and there is more!
@@ -978,6 +1062,10 @@ require('lazy').setup({
         'tsx',
         'javascript',
         'jsx',
+        'go',
+        'gomod',
+        'gosum',
+        'gowork',
         'bash',
         'c',
         'diff',
@@ -1081,6 +1169,8 @@ vim.api.nvim_create_autocmd('CursorHold', {
     local opts = {
       scope = 'cursor', -- Ключевой параметр: показывать только то, что под курсором
       focusable = false,
+      border = 'rounded',
+      winblend = 30,
       close_events = { 'CursorMoved', 'CursorMovedI', 'BufLeave', 'InsertEnter' },
     }
 

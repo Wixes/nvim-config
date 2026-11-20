@@ -11,6 +11,7 @@ return {
         javascript = { 'eslint_d' },
         typescriptreact = { 'eslint_d' },
         javascriptreact = { 'eslint_d' },
+        go = { 'golangcilint' },
       }
 
       -- To allow other plugins to add linters to require('lint').linters_by_ft,
@@ -50,12 +51,28 @@ return {
       local lint_augroup = vim.api.nvim_create_augroup('lint', { clear = true })
       vim.api.nvim_create_autocmd({ 'BufWritePost', 'BufReadPost', 'BufEnter', 'InsertLeave' }, {
         group = lint_augroup,
-        callback = function()
+        callback = function(event)
           -- Only run the linter in buffers that you can modify in order to
           -- avoid superfluous noise, notably within the handy LSP pop-ups that
           -- describe the hovered symbol using Markdown.
-          if vim.bo.modifiable then
-            lint.try_lint()
+          -- golangci-lint analyzes packages and can be expensive, so run it only after saves.
+          if vim.bo[event.buf].filetype == 'go' and event.event ~= 'BufWritePost' then
+            return
+          end
+          if vim.bo[event.buf].modifiable then
+            if event.event == 'InsertLeave' then
+              -- Run after Neovim has fully returned to Normal mode and flushed
+              -- the final text changes from Insert mode.
+              vim.schedule(function()
+                if vim.api.nvim_buf_is_valid(event.buf) and vim.bo[event.buf].modifiable then
+                  vim.api.nvim_buf_call(event.buf, function()
+                    lint.try_lint()
+                  end)
+                end
+              end)
+            else
+              lint.try_lint()
+            end
           end
         end,
       })

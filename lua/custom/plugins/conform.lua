@@ -44,6 +44,7 @@ return { -- Autoformat
     end,
     formatters_by_ft = {
       lua = { 'stylua' },
+      go = { 'goimports' },
       typescript = { 'eslint_d' },
       javascript = { 'eslint_d' },
       typescriptreact = { 'eslint_d' },
